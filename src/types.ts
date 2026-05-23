@@ -44,4 +44,5 @@ export interface TxResult {
   ts: number
   ok: boolean
   message: string
+  closeTime?: string
 }

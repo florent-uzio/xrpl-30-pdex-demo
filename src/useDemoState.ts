@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Wallet } from 'xrpl'
+import { buildTx } from './buildTx'
+import type { BuildTxContext } from './buildTx'
 import { INITIAL_ACCOUNTS } from './mockState'
 import { xrplClient } from './xrplClient'
 import type { Account, AccountRole, Badge, DemoStep, TxResult } from './types'
@@ -9,6 +11,34 @@ const LS_RESULTS = 'pdex-results'
 
 // Wallets in module-level state — survive re-renders, not a page refresh.
 let walletStore: Map<AccountRole, Wallet> = new Map()
+
+function buildContextFromStore(): BuildTxContext {
+  const m = new Map<AccountRole, Account>()
+  for (const acc of INITIAL_ACCOUNTS) {
+    const w = walletStore.get(acc.role)
+    m.set(acc.role, w ? { ...acc, address: w.classicAddress } : acc)
+  }
+  return { accountByRole: m }
+}
+
+const RIPPLE_EPOCH = 946684800
+
+async function submitXrpl(
+  tx: Record<string, unknown>,
+  wallet: Wallet,
+): Promise<{ hash: string; closeTime: string; ok: boolean; errorCode: string }> {
+  if (!xrplClient.isConnected()) await xrplClient.connect()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await (xrplClient as any).submitAndWait(tx, { autofill: true, wallet })
+  const res = response.result as Record<string, unknown>
+  const hash = typeof res.hash === 'string' ? res.hash : 'N/A'
+  const dateVal = typeof res.date === 'number' ? res.date : 0
+  const closeTime = new Date((dateVal + RIPPLE_EPOCH) * 1000).toISOString()
+  const meta = res.meta as Record<string, unknown> | undefined
+  const errorCode =
+    typeof meta?.TransactionResult === 'string' ? meta.TransactionResult : 'unknown'
+  return { hash, closeTime, ok: errorCode === 'tesSUCCESS', errorCode }
+}
 
 function readCompleted(): Set<string> {
   try {
@@ -99,7 +129,94 @@ export function useDemoState() {
         return
       }
 
-      // Mock behavior for steps not yet wired to XRPL (slices 3+).
+      if (
+        step.id === 'p1-trustset-a' ||
+        step.id === 'p1-trustset-b' ||
+        step.id === 'p1-payment'
+      ) {
+        const actorRole =
+          step.id === 'p1-payment'
+            ? 'issuer'
+            : step.id === 'p1-trustset-a'
+              ? 'traderA'
+              : 'traderB'
+        const wallet = walletStore.get(actorRole)
+        if (!wallet) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: 'Run faucet first to fund wallets',
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          return
+        }
+        try {
+          const tx = buildTx(step, buildContextFromStore())
+          const { hash, closeTime, ok, errorCode } = await submitXrpl(tx, wallet)
+          setAccounts((prev) =>
+            prev.map((a) => {
+              const granted = step.grants[a.role]
+              const next = { ...a }
+              if (granted) {
+                next.badges = Array.from(new Set([...a.badges, ...granted])) as Badge[]
+              }
+              if (step.id === 'p1-payment') {
+                if (a.role === 'traderB') next.eurfBalance = 1000
+                if (a.role === 'issuer') next.eurfBalance = -1000
+              }
+              return next
+            }),
+          )
+          const result: TxResult = {
+            stepId: step.id,
+            hash,
+            closeTime,
+            ts: Date.now(),
+            ok,
+            message: ok
+              ? `${step.txType} validated`
+              : `${step.txType} failed: ${errorCode}`,
+          }
+          setResults((prev) => {
+            const next = [...prev, result]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          if (ok) {
+            setCompleted((prev) => {
+              const next = new Set(prev).add(step.id)
+              localStorage.setItem(LS_COMPLETED, JSON.stringify([...next]))
+              return next
+            })
+          }
+        } catch (err) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: err instanceof Error ? err.message : `${step.txType} failed`,
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+        }
+        return
+      }
+
+      // Mock behavior for remaining steps (SEPA is off-ledger; phases 2-5 not yet wired).
       setAccounts((prev) =>
         prev.map((a) => {
           const granted = step.grants[a.role]

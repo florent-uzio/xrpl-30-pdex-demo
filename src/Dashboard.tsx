@@ -559,17 +559,29 @@ export function Dashboard() {
                       {step.description}
                     </div>
                     {stepResult && (
-                      <div
-                        className={`mt-1.5 flex items-center gap-1 text-[11px] ${
-                          stepResult.ok ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {stepResult.ok ? (
-                          <CheckCircle2 className="w-3 h-3 shrink-0" />
-                        ) : (
-                          <AlertCircle className="w-3 h-3 shrink-0" />
+                      <div className="mt-1.5 text-[11px]">
+                        <div
+                          className={`flex items-center gap-1 ${
+                            stepResult.ok ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          {stepResult.ok ? (
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                          )}
+                          {stepResult.message}
+                        </div>
+                        {step.kind !== 'http' && stepResult.hash !== 'N/A' && (
+                          <div className="font-mono text-slate-400 mt-0.5 pl-4">
+                            {stepResult.hash.slice(0, 16)}…
+                            {stepResult.closeTime && (
+                              <span className="ml-2 non-italic text-slate-500">
+                                {new Date(stepResult.closeTime).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
                         )}
-                        {stepResult.message}
                       </div>
                     )}
                   </div>
