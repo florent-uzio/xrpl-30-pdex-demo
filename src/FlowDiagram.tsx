@@ -1,4 +1,4 @@
-// PROTOTYPE — interactive flow diagram for the PDex demo.
+// Interactive flow diagram for the PDex demo.
 // Horizontal narrative: Issuer + Domain Owner orchestrate; the credentialed
 // traders sit inside a dashed Permissioned Domain box alongside the XRPL DEX;
 // off-ledger settlement to a Bank node sits outside.

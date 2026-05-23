@@ -1,6 +1,3 @@
-// PROTOTYPE — in-memory mock state shared by all variants. No XRPL calls; all
-// transactions are simulated so the UI can be evaluated without a network.
-
 import { useCallback, useMemo, useState } from 'react'
 import type {
   Account,

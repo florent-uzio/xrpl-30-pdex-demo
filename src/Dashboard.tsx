@@ -1,7 +1,3 @@
-// PROTOTYPE — Variant A: "Permission Dashboard"
-// Layout: 4 account cards on top (badges accumulate visibly), phase tabs below,
-// tx actions + inline results in the active tab. The handoff's default concept.
-
 import { useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -15,6 +11,7 @@ import {
   Code2,
   Coins,
   Copy,
+  Info,
   KeyRound,
   Network,
   Send,
@@ -339,7 +336,7 @@ function AccountCard({ account }: { account: Account }) {
 
 type TabKey = 'flow' | Phase
 
-export function VariantA() {
+export function Dashboard() {
   const { accounts, accountByRole, completed, results, runStep, reset } = useMockDemo()
   // Default to the flow diagram — that's how the demo opens (high-level
   // explainer first, then drill into the phase tabs to execute transactions).
@@ -394,6 +391,16 @@ export function VariantA() {
           </button>
         </div>
       </header>
+
+      {/* Demo simplification disclaimer (ADR 0001) */}
+      <div className="px-6 py-2 bg-amber-500/8 border-b border-amber-500/20 flex items-center gap-2">
+        <Info className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+        <p className="text-[11px] text-amber-200/80">
+          <span className="font-semibold text-amber-300">Demo simplification:</span>{' '}
+          The Issuer account doubles as both the XRPL credential issuer and the EURF IOU issuer.
+          In production these would be separate entities.
+        </p>
+      </div>
 
       <section className="px-6 pt-5">
         <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">

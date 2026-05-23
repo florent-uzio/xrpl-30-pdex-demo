@@ -1,6 +1,3 @@
-// PROTOTYPE — throwaway types for the UI exploration. Will be replaced once a
-// variant wins and the real implementation begins (with xrpl.js wiring).
-
 export type AccountRole = 'issuer' | 'domainOwner' | 'traderA' | 'traderB'
 
 export type Badge =
