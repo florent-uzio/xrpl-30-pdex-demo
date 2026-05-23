@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  AlertCircle,
   BadgeCheck,
   Banknote,
   Check,
@@ -13,6 +14,7 @@ import {
   Copy,
   Info,
   KeyRound,
+  Loader2,
   Network,
   Send,
   ShieldCheck,
@@ -28,9 +30,9 @@ import {
   PHASE_LABELS,
   PHASE_ORDER,
   STEPS,
-  useMockDemo,
 } from './mockState'
 import type { Account, Badge, DemoStep, Phase } from './types'
+import { useDemoState } from './useDemoState'
 
 const ROLE_ICON: Record<Account['role'], typeof Wallet> = {
   issuer: Coins,
@@ -337,11 +339,20 @@ function AccountCard({ account }: { account: Account }) {
 type TabKey = 'flow' | Phase
 
 export function Dashboard() {
-  const { accounts, accountByRole, completed, results, runStep, reset } = useMockDemo()
+  const { accounts, accountByRole, completed, results, runStep, reset } = useDemoState()
   // Default to the flow diagram — that's how the demo opens (high-level
   // explainer first, then drill into the phase tabs to execute transactions).
   const [activeTab, setActiveTab] = useState<TabKey>('flow')
   const [inspectingId, setInspectingId] = useState<string | null>(null)
+  const [runningId, setRunningId] = useState<string | null>(null)
+
+  const handleRunStep = useCallback(
+    (step: DemoStep) => {
+      setRunningId(step.id)
+      runStep(step).finally(() => setRunningId(null))
+    },
+    [runStep],
+  )
 
   const phaseSteps = useMemo(
     () =>
@@ -477,10 +488,12 @@ export function Dashboard() {
         <div className="col-span-2 flex flex-col gap-3">
           {phaseSteps.map((step) => {
             const done = completed.has(step.id)
+            const isRunning = runningId === step.id
             const actor = accountByRole.get(step.actor)!
             const Icon = ROLE_ICON[step.actor]
             const isInspecting = inspectingId === step.id
             const json = buildTxJson(step, accountByRole)
+            const stepResult = results.find((r) => r.stepId === step.id)
             return (
               <div
                 key={step.id}
@@ -494,7 +507,9 @@ export function Dashboard() {
               >
                 <div className="p-4 flex items-start gap-3">
                   <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center ring-1 ring-slate-700">
-                    {done ? (
+                    {isRunning ? (
+                      <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+                    ) : done ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                     ) : (
                       <Circle className="w-5 h-5 text-slate-500" />
@@ -518,6 +533,20 @@ export function Dashboard() {
                     <div className="text-xs text-slate-400 mt-0.5">
                       {step.description}
                     </div>
+                    {stepResult && (
+                      <div
+                        className={`mt-1.5 flex items-center gap-1 text-[11px] ${
+                          stepResult.ok ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {stepResult.ok ? (
+                          <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                        )}
+                        {stepResult.message}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -539,15 +568,15 @@ export function Dashboard() {
                       />
                     </button>
                     <button
-                      disabled={done}
-                      onClick={() => runStep(step)}
+                      disabled={done || isRunning}
+                      onClick={() => handleRunStep(step)}
                       className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
-                        done
+                        done || isRunning
                           ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                           : 'bg-indigo-500 hover:bg-indigo-400 text-white'
                       }`}
                     >
-                      {done ? 'Done' : 'Execute'}
+                      {done ? 'Done' : isRunning ? 'Running…' : 'Execute'}
                     </button>
                   </div>
                 </div>
@@ -559,7 +588,7 @@ export function Dashboard() {
                       json={json}
                       done={done}
                       resultHash={resultByStep.get(step.id)}
-                      onSubmit={() => runStep(step)}
+                      onSubmit={() => handleRunStep(step)}
                       onClose={() => setInspectingId(null)}
                     />
                   )}

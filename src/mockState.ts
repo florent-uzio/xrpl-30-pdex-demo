@@ -23,7 +23,7 @@ const FAKE_DOMAIN_ID =
 const fakeAddress = (seed: string) =>
   'r' + seed.padEnd(24, 'X').slice(0, 24) + '7p9q'
 
-const INITIAL_ACCOUNTS: Account[] = [
+export const INITIAL_ACCOUNTS: Account[] = [
   {
     role: 'issuer',
     label: 'Issuer',
