@@ -305,6 +305,96 @@ export function useDemoState() {
         return
       }
 
+      if (
+        step.id === 'p4-offer-a' ||
+        step.id === 'p4-offer-b' ||
+        step.id === 'p4-open-offer'
+      ) {
+        const actorRole = step.id === 'p4-offer-a' ? 'traderA' : 'traderB'
+        const wallet = walletStore.get(actorRole)
+        if (!wallet) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: 'Run faucet first to fund wallets',
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          return
+        }
+        try {
+          const tx = buildTx(step, buildContextFromStore())
+          const { hash, closeTime, ok, errorCode } = await submitXrpl(tx, wallet)
+          if (ok) {
+            setAccounts((prev) =>
+              prev.map((a) => {
+                const granted = step.grants[a.role]
+                const next = { ...a }
+                if (granted) {
+                  next.badges = Array.from(new Set([...a.badges, ...granted])) as Badge[]
+                }
+                if (step.id === 'p4-offer-b') {
+                  if (a.role === 'traderA') {
+                    next.xrpBalance = a.xrpBalance - 100
+                    next.eurfBalance = a.eurfBalance + 100
+                  }
+                  if (a.role === 'traderB') {
+                    next.xrpBalance = a.xrpBalance + 100
+                    next.eurfBalance = a.eurfBalance - 100
+                  }
+                }
+                return next
+              }),
+            )
+          }
+          const result: TxResult = {
+            stepId: step.id,
+            hash,
+            closeTime,
+            ts: Date.now(),
+            ok,
+            message: ok
+              ? `${step.txType} validated`
+              : `${step.txType} failed: ${errorCode}`,
+          }
+          setResults((prev) => {
+            const next = [...prev, result]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          if (ok) {
+            setCompleted((prev) => {
+              const next = new Set(prev).add(step.id)
+              localStorage.setItem(LS_COMPLETED, JSON.stringify([...next]))
+              return next
+            })
+          }
+        } catch (err) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: err instanceof Error ? err.message : `${step.txType} failed`,
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+        }
+        return
+      }
+
       if (step.id === 'p3-domain') {
         const wallet = walletStore.get('domainOwner')
         if (!wallet) {
@@ -389,16 +479,6 @@ export function useDemoState() {
           if (step.id === 'p1-payment') {
             if (a.role === 'traderB') next.eurfBalance = 1000
             if (a.role === 'issuer') next.eurfBalance = -1000
-          }
-          if (step.id === 'p4-offer-b') {
-            if (a.role === 'traderA') {
-              next.xrpBalance = a.xrpBalance - 100
-              next.eurfBalance = a.eurfBalance + 100
-            }
-            if (a.role === 'traderB') {
-              next.xrpBalance = a.xrpBalance + 100
-              next.eurfBalance = a.eurfBalance - 100
-            }
           }
           if (step.id === 'p5-burn') {
             if (a.role === 'traderA') next.eurfBalance = a.eurfBalance - 100

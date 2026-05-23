@@ -189,6 +189,10 @@ const HTTP_STEP_HEADER: Record<string, string> = {
   'p5-redeem': 'Fiat redemption · POST to issuer redemption API',
 }
 
+const XRPL_STEP_HEADER: Record<string, string> = {
+  'p4-open-offer': 'OfferCreate · open-book / public DEX (no DomainID)',
+}
+
 function TxInspector({
   step,
   json,
@@ -207,7 +211,7 @@ function TxInspector({
 
   const headerText = isHttp
     ? (HTTP_STEP_HEADER[step.id] ?? 'Off-ledger API request')
-    : `${String(json.TransactionType)} · signed and submitted to XRPL`
+    : (XRPL_STEP_HEADER[step.id] ?? `${String(json.TransactionType)} · signed and submitted to XRPL`)
 
   return (
     <motion.div
