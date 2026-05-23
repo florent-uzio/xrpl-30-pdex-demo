@@ -54,7 +54,7 @@ export const STEPS: DemoStep[] = [
     txType: 'FaucetFund',
     title: 'Generate & fund 4 accounts via testnet faucet',
     description:
-      "POST to the rippletest.net faucet for each account — generates a fresh XRPL wallet and credits ~1000 XRP. Not a signed XRPL transaction; it's an out-of-band testnet helper.",
+      "POST to the rippletest.net faucet for each account — generates a fresh XRPL wallet and credits ~100 XRP. Not a signed XRPL transaction; it's an out-of-band testnet helper.",
     kind: 'http',
     grants: {},
   },

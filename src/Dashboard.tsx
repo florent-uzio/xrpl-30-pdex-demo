@@ -12,6 +12,7 @@ import {
   Code2,
   Coins,
   Copy,
+  ExternalLink,
   Eye,
   Info,
   KeyRound,
@@ -33,7 +34,7 @@ import {
   PHASE_ORDER,
   STEPS,
 } from './mockState'
-import type { Account, Badge, DemoStep, Phase } from './types'
+import type { Account, Badge, DemoStep, Phase, TxResult } from './types'
 import { useDemoState } from './useDemoState'
 
 const ROLE_ICON: Record<Account['role'], typeof Wallet> = {
@@ -312,20 +313,48 @@ function TxInspector({
 
 function AccountCard({ account }: { account: Account }) {
   const Icon = ROLE_ICON[account.role]
+  const [copied, setCopied] = useState(false)
+
+  function copyAddress() {
+    navigator.clipboard.writeText(account.address)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   return (
     <div className="flex-1 rounded-2xl bg-slate-800/60 ring-1 ring-slate-700 p-4 flex flex-col gap-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <div
-          className={`w-9 h-9 rounded-xl ring-1 flex items-center justify-center ${ROLE_AVATAR[account.role]}`}
+          className={`w-9 h-9 rounded-xl ring-1 flex items-center justify-center shrink-0 ${ROLE_AVATAR[account.role]}`}
         >
           <Icon className="w-5 h-5" />
         </div>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-white truncate">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-white">
             {account.label}
           </div>
-          <div className="text-[11px] font-mono text-slate-400 truncate">
-            {account.address.slice(0, 12)}…
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] font-mono text-slate-400 break-all">
+              {account.address}
+            </span>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={copyAddress}
+                className="p-0.5 rounded text-slate-500 hover:text-slate-300 transition-colors"
+                title="Copy address"
+              >
+                {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+              <a
+                href={`https://testnet.xrpl.org/accounts/${account.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-0.5 rounded text-slate-500 hover:text-slate-300 transition-colors"
+                title="View on testnet explorer"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -398,6 +427,22 @@ export function Dashboard() {
     () => ({ accountByRole, domainId, burnTxHash: resultByStep.get('p5-burn') }),
     [accountByRole, domainId, resultByStep],
   )
+
+  const stepById = useMemo(() => {
+    const m = new Map<string, DemoStep>()
+    for (const s of STEPS) m.set(s.id, s)
+    return m
+  }, [])
+
+  const resultsByPhase = useMemo(() => {
+    const map = new Map<Phase, TxResult[]>()
+    for (const phase of PHASE_ORDER) map.set(phase, [])
+    for (const r of results) {
+      const step = stepById.get(r.stepId)
+      if (step) map.get(step.phase)!.push(r)
+    }
+    return map
+  }, [results, stepById])
 
   // Clicking an edge in the diagram jumps to that step's phase tab and pre-opens
   // the JSON inspector so the viewer immediately sees the transaction shape.
@@ -659,23 +704,68 @@ export function Dashboard() {
           {results.length === 0 && (
             <div className="text-xs text-slate-500 italic">No transactions yet.</div>
           )}
-          <ul className="flex flex-col gap-2 max-h-[60vh] overflow-auto">
-            {results
-              .slice()
-              .reverse()
-              .map((r) => (
-                <li
-                  key={r.hash}
-                  className="rounded-md bg-slate-900/60 px-2 py-1.5 ring-1 ring-slate-800"
-                >
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span className="font-mono text-slate-300 truncate">{r.hash}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">{r.message}</div>
-                </li>
-              ))}
-          </ul>
+          <div className="flex flex-col gap-4 max-h-[60vh] overflow-auto">
+            {PHASE_ORDER.map((phase) => {
+              const phaseResults = resultsByPhase.get(phase) ?? []
+              if (phaseResults.length === 0) return null
+              return (
+                <div key={phase}>
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold ring-1 mb-1.5 ${PHASE_BADGE[phase]}`}>
+                    {PHASE_LABELS[phase]}
+                  </span>
+                  <ul className="flex flex-col gap-1.5">
+                    {phaseResults.map((r) => {
+                      const step = stepById.get(r.stepId)
+                      const Icon = step ? ROLE_ICON[step.actor] : null
+                      const actorLabel = step ? (accountByRole.get(step.actor)?.label ?? step.actor) : null
+                      return (
+                        <li
+                          key={r.hash}
+                          className="rounded-md bg-slate-900/60 px-2 py-1.5 ring-1 ring-slate-800"
+                        >
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            {r.ok ? (
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                            ) : (
+                              <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
+                            )}
+                            {step && Icon && (
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ring-1 shrink-0 ${ROLE_CHIP[step.actor]}`}>
+                                <Icon className="w-2.5 h-2.5" />
+                                {actorLabel}
+                              </span>
+                            )}
+                            <span className="text-slate-300 truncate flex-1">
+                              {step?.title ?? r.message}
+                            </span>
+                            {r.hash !== 'N/A' && !r.hash.startsWith('RDMP-') && (
+                              <a
+                                href={`https://testnet.xrpl.org/transactions/${r.hash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-slate-500 hover:text-slate-300 transition-colors"
+                                title="View on testnet explorer"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500 mt-0.5 pl-4">
+                            {r.hash !== 'N/A' ? `${r.hash.slice(0, 12)}…` : r.message}
+                            {r.closeTime && (
+                              <span className="ml-2 text-slate-600">
+                                {new Date(r.closeTime).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
         </aside>
       </main>
       )}

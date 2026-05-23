@@ -30,10 +30,10 @@ export function buildTx(
         url: 'https://faucet.altnet.rippletest.net/accounts',
         calls: 4,
         wallets: [
-          { role: 'Issuer', address: issuer.address, funded: '~1000 XRP' },
-          { role: 'Domain Owner', address: domainOwner.address, funded: '~1000 XRP' },
-          { role: 'Trader A', address: traderA.address, funded: '~1000 XRP' },
-          { role: 'Trader B', address: traderB.address, funded: '~1000 XRP' },
+          { role: 'Issuer', address: issuer.address, funded: '~100 XRP' },
+          { role: 'Domain Owner', address: domainOwner.address, funded: '~100 XRP' },
+          { role: 'Trader A', address: traderA.address, funded: '~100 XRP' },
+          { role: 'Trader B', address: traderB.address, funded: '~100 XRP' },
         ],
       }
     case 'p1-sepa':
