@@ -90,4 +90,32 @@ describe('useDemoState', () => {
     expect(trustAResult.hash).not.toBe('N/A')
     expect(trustAResult.closeTime).toBeDefined()
   })
+
+  it('Phase 2: KYC badge appears only after CredentialAccept, not CredentialCreate', async () => {
+    const { result } = renderHook(() => useDemoState())
+    act(() => { result.current.reset() })
+
+    const step = (id: string) => STEPS.find((s) => s.id === id)!
+
+    await act(async () => { await result.current.runStep(step('p1-faucet')) })
+
+    await act(async () => { await result.current.runStep(step('p2-credcreate-a')) })
+    expect(result.current.accountByRole.get('traderA')!.badges).not.toContain('KYC')
+
+    await act(async () => { await result.current.runStep(step('p2-credcreate-b')) })
+    expect(result.current.accountByRole.get('traderB')!.badges).not.toContain('KYC')
+
+    await act(async () => { await result.current.runStep(step('p2-accept-a')) })
+    expect(result.current.accountByRole.get('traderA')!.badges).toContain('KYC')
+    expect(result.current.completed.has('p2-accept-a')).toBe(true)
+
+    await act(async () => { await result.current.runStep(step('p2-accept-b')) })
+    expect(result.current.accountByRole.get('traderB')!.badges).toContain('KYC')
+    expect(result.current.completed.has('p2-accept-b')).toBe(true)
+
+    const createAResult = result.current.results.find((r) => r.stepId === 'p2-credcreate-a')!
+    expect(createAResult.ok).toBe(true)
+    expect(createAResult.hash).not.toBe('N/A')
+    expect(createAResult.closeTime).toBeDefined()
+  })
 })

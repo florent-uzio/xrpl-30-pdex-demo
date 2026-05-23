@@ -118,6 +118,10 @@ describe('buildTx — KYC_VERIFIED hex', () => {
   it('p2-accept-a CredentialType is KYC_VERIFIED_HEX', () => {
     expect(buildTx(step('p2-accept-a'), ctx).CredentialType).toBe(KYC_VERIFIED_HEX)
   })
+
+  it('p2-accept-b CredentialType is KYC_VERIFIED_HEX', () => {
+    expect(buildTx(step('p2-accept-b'), ctx).CredentialType).toBe(KYC_VERIFIED_HEX)
+  })
 })
 
 describe('buildTx — DomainID', () => {
