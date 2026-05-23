@@ -271,6 +271,15 @@ function selfLoopPath(
   return { d, mid }
 }
 
+// ---------- Pure helpers (exported for unit tests) ----------
+
+export function isPdBoxVisible(filter: Phase, completed: Set<string>): boolean {
+  return (
+    (filter === 'domain' && completed.has('p3-domain')) ||
+    (filter === 'trading' && completed.has('p2-accept-a') && completed.has('p2-accept-b'))
+  )
+}
+
 // ---------- Component ----------
 
 interface Props {
@@ -291,17 +300,7 @@ export function FlowDiagram({ completed, onSelectStep }: Props) {
     [filter],
   )
 
-  // Permissioned Domain box appears in two contexts:
-  //   • Domain phase view: after PermissionedDomainSet is submitted, so the
-  //     creation of the domain is the "reveal".
-  //   • Trading phase view: once both traders have accepted their credentials,
-  //     making explicit which accounts the domain encloses for the trade.
-  // Hidden in other phases — would be visual noise where it adds no meaning.
-  const pdBoxVisible =
-    (filter === 'domain' && completed.has('p3-domain')) ||
-    (filter === 'trading' &&
-      completed.has('p2-accept-a') &&
-      completed.has('p2-accept-b'))
+  const pdBoxVisible = isPdBoxVisible(filter, completed)
 
   const hoveredStep = useMemo(
     () => (hoveredId ? STEPS.find((s) => s.id === hoveredId) : null),

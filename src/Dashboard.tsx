@@ -385,9 +385,14 @@ export function Dashboard() {
     return m
   }, [results])
 
+  const domainId = useMemo(
+    () => results.find((r) => r.stepId === 'p3-domain')?.domainId,
+    [results],
+  )
+
   const buildTxContext = useMemo<BuildTxContext>(
-    () => ({ accountByRole, burnTxHash: resultByStep.get('p5-burn') }),
-    [accountByRole, resultByStep],
+    () => ({ accountByRole, domainId, burnTxHash: resultByStep.get('p5-burn') }),
+    [accountByRole, domainId, resultByStep],
   )
 
   // Clicking an edge in the diagram jumps to that step's phase tab and pre-opens
@@ -580,6 +585,11 @@ export function Dashboard() {
                                 {new Date(stepResult.closeTime).toLocaleTimeString()}
                               </span>
                             )}
+                          </div>
+                        )}
+                        {stepResult.domainId && (
+                          <div className="font-mono text-cyan-400/80 mt-0.5 pl-4">
+                            DomainID: {stepResult.domainId.slice(0, 16)}…
                           </div>
                         )}
                       </div>

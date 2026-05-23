@@ -45,4 +45,5 @@ export interface TxResult {
   ok: boolean
   message: string
   closeTime?: string
+  domainId?: string
 }

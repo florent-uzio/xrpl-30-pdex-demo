@@ -9,8 +9,9 @@ import type { Account, AccountRole, Badge, DemoStep, TxResult } from './types'
 const LS_COMPLETED = 'pdex-completed'
 const LS_RESULTS = 'pdex-results'
 
-// Wallets in module-level state — survive re-renders, not a page refresh.
+// Wallets and domain ID in module-level state — survive re-renders, not a page refresh.
 let walletStore: Map<AccountRole, Wallet> = new Map()
+let domainIdStore: string | undefined = undefined
 
 function buildContextFromStore(): BuildTxContext {
   const m = new Map<AccountRole, Account>()
@@ -18,7 +19,20 @@ function buildContextFromStore(): BuildTxContext {
     const w = walletStore.get(acc.role)
     m.set(acc.role, w ? { ...acc, address: w.classicAddress } : acc)
   }
-  return { accountByRole: m }
+  return { accountByRole: m, domainId: domainIdStore }
+}
+
+function extractDomainId(meta: Record<string, unknown>): string | undefined {
+  const nodes = meta.AffectedNodes as unknown[]
+  if (!Array.isArray(nodes)) return undefined
+  for (const node of nodes) {
+    const n = node as Record<string, unknown>
+    const created = n.CreatedNode as Record<string, unknown> | undefined
+    if (created?.LedgerEntryType === 'PermissionedDomain') {
+      return typeof created.LedgerIndex === 'string' ? created.LedgerIndex : undefined
+    }
+  }
+  return undefined
 }
 
 const RIPPLE_EPOCH = 946684800
@@ -26,7 +40,7 @@ const RIPPLE_EPOCH = 946684800
 async function submitXrpl(
   tx: Record<string, unknown>,
   wallet: Wallet,
-): Promise<{ hash: string; closeTime: string; ok: boolean; errorCode: string }> {
+): Promise<{ hash: string; closeTime: string; ok: boolean; errorCode: string; meta: Record<string, unknown> }> {
   if (!xrplClient.isConnected()) await xrplClient.connect()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await (xrplClient as any).submitAndWait(tx, { autofill: true, wallet })
@@ -34,10 +48,10 @@ async function submitXrpl(
   const hash = typeof res.hash === 'string' ? res.hash : 'N/A'
   const dateVal = typeof res.date === 'number' ? res.date : 0
   const closeTime = new Date((dateVal + RIPPLE_EPOCH) * 1000).toISOString()
-  const meta = res.meta as Record<string, unknown> | undefined
+  const meta = (res.meta as Record<string, unknown>) ?? {}
   const errorCode =
-    typeof meta?.TransactionResult === 'string' ? meta.TransactionResult : 'unknown'
-  return { hash, closeTime, ok: errorCode === 'tesSUCCESS', errorCode }
+    typeof meta.TransactionResult === 'string' ? meta.TransactionResult : 'unknown'
+  return { hash, closeTime, ok: errorCode === 'tesSUCCESS', errorCode, meta }
 }
 
 function readCompleted(): Set<string> {
@@ -291,7 +305,80 @@ export function useDemoState() {
         return
       }
 
-      // Mock behavior for remaining steps (SEPA is off-ledger; phases 3-5 not yet wired).
+      if (step.id === 'p3-domain') {
+        const wallet = walletStore.get('domainOwner')
+        if (!wallet) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: 'Run faucet first to fund wallets',
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          return
+        }
+        try {
+          const tx = buildTx(step, buildContextFromStore())
+          const { hash, closeTime, ok, errorCode, meta } = await submitXrpl(tx, wallet)
+          const capturedDomainId = ok ? extractDomainId(meta) : undefined
+          if (capturedDomainId) domainIdStore = capturedDomainId
+          setAccounts((prev) =>
+            prev.map((a) => {
+              const granted = step.grants[a.role]
+              if (!granted) return a
+              return { ...a, badges: Array.from(new Set([...a.badges, ...granted])) as Badge[] }
+            }),
+          )
+          const result: TxResult = {
+            stepId: step.id,
+            hash,
+            closeTime,
+            ts: Date.now(),
+            ok,
+            message: ok
+              ? `${step.txType} validated`
+              : `${step.txType} failed: ${errorCode}`,
+            domainId: capturedDomainId,
+          }
+          setResults((prev) => {
+            const next = [...prev, result]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          if (ok) {
+            setCompleted((prev) => {
+              const next = new Set(prev).add(step.id)
+              localStorage.setItem(LS_COMPLETED, JSON.stringify([...next]))
+              return next
+            })
+          }
+        } catch (err) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: err instanceof Error ? err.message : `${step.txType} failed`,
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+        }
+        return
+      }
+
+      // Mock behavior for remaining steps (SEPA is off-ledger; phases 4-5 not yet wired).
       setAccounts((prev) =>
         prev.map((a) => {
           const granted = step.grants[a.role]
@@ -351,6 +438,7 @@ export function useDemoState() {
 
   const reset = useCallback(() => {
     walletStore = new Map()
+    domainIdStore = undefined
     setAccounts(INITIAL_ACCOUNTS)
     setCompleted(new Set())
     setResults([])

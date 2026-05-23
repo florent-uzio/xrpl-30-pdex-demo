@@ -11,14 +11,28 @@ vi.mock('./xrplClient', () => ({
       wallet: { classicAddress: `rTestAddress${addressCounter++}` },
       balance: 1000,
     })),
-    submitAndWait: vi.fn().mockImplementation(async (tx: Record<string, unknown>) => ({
-      result: {
-        hash: `HASH${String(tx.TransactionType)}`.padEnd(16, '0'),
-        date: 0,
-        meta: { TransactionResult: 'tesSUCCESS' },
-        validated: true,
-      },
-    })),
+    submitAndWait: vi.fn().mockImplementation(async (tx: Record<string, unknown>) => {
+      const meta: Record<string, unknown> = { TransactionResult: 'tesSUCCESS' }
+      if (tx.TransactionType === 'PermissionedDomainSet') {
+        meta.AffectedNodes = [
+          {
+            CreatedNode: {
+              LedgerEntryType: 'PermissionedDomain',
+              LedgerIndex: 'DOMAIN0000000000000000000000000000000000000000000000000000000001',
+              NewFields: {},
+            },
+          },
+        ]
+      }
+      return {
+        result: {
+          hash: `HASH${String(tx.TransactionType)}`.padEnd(16, '0'),
+          date: 0,
+          meta,
+          validated: true,
+        },
+      }
+    }),
   },
 }))
 
@@ -117,5 +131,26 @@ describe('useDemoState', () => {
     expect(createAResult.ok).toBe(true)
     expect(createAResult.hash).not.toBe('N/A')
     expect(createAResult.closeTime).toBeDefined()
+  })
+
+  it('Phase 3: DomainActive badge on domainOwner, DomainID captured in result', async () => {
+    const { result } = renderHook(() => useDemoState())
+    act(() => { result.current.reset() })
+
+    const step = (id: string) => STEPS.find((s) => s.id === id)!
+
+    await act(async () => { await result.current.runStep(step('p1-faucet')) })
+    await act(async () => { await result.current.runStep(step('p3-domain')) })
+
+    expect(result.current.accountByRole.get('domainOwner')!.badges).toContain('DomainActive')
+    expect(result.current.completed.has('p3-domain')).toBe(true)
+
+    const domainResult = result.current.results.find((r) => r.stepId === 'p3-domain')!
+    expect(domainResult.ok).toBe(true)
+    expect(domainResult.hash).not.toBe('N/A')
+    expect(domainResult.closeTime).toBeDefined()
+    expect(domainResult.domainId).toBe(
+      'DOMAIN0000000000000000000000000000000000000000000000000000000001',
+    )
   })
 })
