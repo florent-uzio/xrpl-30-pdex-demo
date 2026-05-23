@@ -8,18 +8,6 @@ import type {
   TxResult,
 } from './types'
 
-// Hex-encoded `KYC_VERIFIED` credential type (XRPL requires hex for CredentialType).
-const KYC_VERIFIED_HEX = '4B59435F564552494649454400000000'
-
-// EURF is a 4-character currency code, so XRPL requires the 40-char hex form
-// ('EURF' → 0x45 0x55 0x52 0x46, then padded with zeros to 20 bytes).
-// USD is 3 chars so it stays as the plain ASCII string in transaction JSON.
-const EURF_HEX = '4555524600000000000000000000000000000000'
-
-// Fake but realistic-looking 64-char hex domain id for the OfferCreate preview.
-const FAKE_DOMAIN_ID =
-  'D0E1B5C0FFEEDA7AD0E1B5C0FFEEDA7AD0E1B5C0FFEEDA7AD0E1B5C0FFEEDA7A'
-
 const fakeAddress = (seed: string) =>
   'r' + seed.padEnd(24, 'X').slice(0, 24) + '7p9q'
 
@@ -100,7 +88,7 @@ export const STEPS: DemoStep[] = [
     grants: {},
   },
   {
-    id: 'p1-pay-iou',
+    id: 'p1-payment',
     phase: 'setup',
     actor: 'issuer',
     txType: 'Payment',
@@ -110,7 +98,7 @@ export const STEPS: DemoStep[] = [
     grants: { traderB: ['IOUFunded'] },
   },
   {
-    id: 'p2-cred-a',
+    id: 'p2-credcreate-a',
     phase: 'credentials',
     actor: 'issuer',
     txType: 'CredentialCreate',
@@ -119,7 +107,7 @@ export const STEPS: DemoStep[] = [
     grants: {},
   },
   {
-    id: 'p2-cred-b',
+    id: 'p2-credcreate-b',
     phase: 'credentials',
     actor: 'issuer',
     txType: 'CredentialCreate',
@@ -173,7 +161,7 @@ export const STEPS: DemoStep[] = [
     grants: { traderA: ['TradeExecuted'], traderB: ['TradeExecuted'] },
   },
   {
-    id: 'p4-offer-open',
+    id: 'p4-open-offer',
     phase: 'trading',
     actor: 'traderB',
     txType: 'OfferCreate',
@@ -263,7 +251,7 @@ export function useMockDemo() {
         // EURF mint happens in p1-pay-iou below.
         // Phase 1: Issuer mints 1000 EURF and sends it to Trader B (who will
         // later sell it on the DEX).
-        if (step.id === 'p1-pay-iou') {
+        if (step.id === 'p1-payment') {
           if (a.role === 'traderB') next.eurfBalance = 1000
           if (a.role === 'issuer') next.eurfBalance = -1000
         }
@@ -323,240 +311,4 @@ export function useMockDemo() {
   }, [accounts])
 
   return { accounts, accountByRole, completed, results, runStep, reset }
-}
-
-// Builds the transaction JSON that would be signed and submitted for a step.
-// Realistic XRPL field names; values reference the actual mock addresses so the
-// JSON shown in the inspector matches the cards above. Fee shown as a constant
-// (12 drops) since drops are pedagogically useful; Sequence/LastLedgerSequence
-// omitted as they are autofilled at signing time.
-export function buildTxJson(
-  step: DemoStep,
-  accountByRole: Map<AccountRole, Account>,
-): Record<string, unknown> {
-  const issuer = accountByRole.get('issuer')!
-  const traderA = accountByRole.get('traderA')!
-  const traderB = accountByRole.get('traderB')!
-  const domainOwner = accountByRole.get('domainOwner')!
-
-  switch (step.id) {
-    case 'p1-faucet':
-      // Not a signed XRPL transaction — a testnet faucet HTTP call, repeated
-      // per account. In real impl this maps to `client.fundWallet()` × 4.
-      return {
-        method: 'POST',
-        url: 'https://faucet.altnet.rippletest.net/accounts',
-        calls: 4,
-        wallets: [
-          { role: 'Issuer', address: issuer.address, funded: '~1000 XRP' },
-          {
-            role: 'Domain Owner',
-            address: domainOwner.address,
-            funded: '~1000 XRP',
-          },
-          { role: 'Trader A', address: traderA.address, funded: '~1000 XRP' },
-          { role: 'Trader B', address: traderB.address, funded: '~1000 XRP' },
-        ],
-      }
-    case 'p1-sepa':
-      // Off-ledger SEPA payment. Trader B's bank instructs a transfer to the
-      // Issuer's bank account; the EUR balance there backs the EURF that will
-      // be minted on-ledger in the next step.
-      return {
-        method: 'POST',
-        url: 'https://traderbank.example.com/v1/sepa/transfers',
-        headers: {
-          Authorization: 'Bearer ${TRADER_B_API_KEY}',
-          'Content-Type': 'application/json',
-        },
-        body: {
-          from: {
-            name: 'Trader B',
-            iban: 'DE89 3704 0044 0532 0130 00',
-            bic: 'COBADEFFXXX',
-          },
-          to: {
-            name: 'Issuer Bank',
-            iban: 'FR14 2004 1010 0505 0001 3M02 606',
-            bic: 'BNPAFRPPXXX',
-          },
-          amount: '1000.00',
-          currency: 'EUR',
-          rail: 'SEPA',
-          reference: `Backing for EURF mint to ${traderB.address}`,
-        },
-      }
-    case 'p1-trustset-a':
-      return {
-        TransactionType: 'TrustSet',
-        Account: traderA.address,
-        LimitAmount: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '1000000',
-        },
-        Fee: '12',
-      }
-    case 'p1-trustset-b':
-      return {
-        TransactionType: 'TrustSet',
-        Account: traderB.address,
-        LimitAmount: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '1000000',
-        },
-        Fee: '12',
-      }
-    case 'p1-pay-iou':
-      return {
-        TransactionType: 'Payment',
-        Account: issuer.address,
-        Destination: traderB.address,
-        Amount: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '1000',
-        },
-        Fee: '12',
-      }
-    case 'p2-cred-a':
-      return {
-        TransactionType: 'CredentialCreate',
-        Account: issuer.address,
-        Subject: traderA.address,
-        CredentialType: KYC_VERIFIED_HEX,
-        Fee: '12',
-      }
-    case 'p2-cred-b':
-      return {
-        TransactionType: 'CredentialCreate',
-        Account: issuer.address,
-        Subject: traderB.address,
-        CredentialType: KYC_VERIFIED_HEX,
-        Fee: '12',
-      }
-    case 'p2-accept-a':
-      return {
-        TransactionType: 'CredentialAccept',
-        Account: traderA.address,
-        Issuer: issuer.address,
-        CredentialType: KYC_VERIFIED_HEX,
-        Fee: '12',
-      }
-    case 'p2-accept-b':
-      return {
-        TransactionType: 'CredentialAccept',
-        Account: traderB.address,
-        Issuer: issuer.address,
-        CredentialType: KYC_VERIFIED_HEX,
-        Fee: '12',
-      }
-    case 'p3-domain':
-      return {
-        TransactionType: 'PermissionedDomainSet',
-        Account: domainOwner.address,
-        AcceptedCredentials: [
-          {
-            Credential: {
-              Issuer: issuer.address,
-              CredentialType: KYC_VERIFIED_HEX,
-            },
-          },
-        ],
-        Fee: '12',
-      }
-    case 'p4-offer-a':
-      // Trader A sells 100 XRP for 100 EURF. TakerGets = what the taker
-      // receives (XRP drops, what Trader A gives up); TakerPays = what the
-      // taker pays (EURF IOU, what Trader A receives). EURF is 4 chars so the
-      // currency field is the 40-char hex form, not the ASCII string.
-      return {
-        TransactionType: 'OfferCreate',
-        Account: traderA.address,
-        TakerGets: '100000000',
-        TakerPays: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '100',
-        },
-        DomainID: FAKE_DOMAIN_ID,
-        Fee: '12',
-      }
-    case 'p4-offer-b':
-      // Trader B sells 100 EURF for 100 XRP — opposite of the above.
-      return {
-        TransactionType: 'OfferCreate',
-        Account: traderB.address,
-        TakerGets: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '100',
-        },
-        TakerPays: '100000000',
-        DomainID: FAKE_DOMAIN_ID,
-        Fee: '12',
-      }
-    case 'p4-offer-open':
-      // Same OfferCreate shape, DomainID omitted. In production this offer
-      // would sit on the open order book and would not consume the permissioned
-      // offers above.
-      return {
-        TransactionType: 'OfferCreate',
-        Account: traderB.address,
-        TakerGets: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '50',
-        },
-        TakerPays: '50000000',
-        Fee: '12',
-      }
-    case 'p5-burn':
-      // Returning EURF to its issuer burns that portion of the IOU. Trader A
-      // returns the 100 EURF they acquired via the Phase 4 trade.
-      return {
-        TransactionType: 'Payment',
-        Account: traderA.address,
-        Destination: issuer.address,
-        Amount: {
-          currency: EURF_HEX,
-          issuer: issuer.address,
-          value: '100',
-        },
-        Fee: '12',
-      }
-    case 'p5-redeem':
-      // Not an XRPL transaction — an off-ledger API call to the IOU issuer.
-      // The inspector treats `kind: 'http'` steps differently (different
-      // header text and submit-button label).
-      return {
-        method: 'POST',
-        url: 'https://issuer.example.com/v1/redemptions',
-        headers: {
-          Authorization: 'Bearer ${ISSUER_API_KEY}',
-          'Content-Type': 'application/json',
-        },
-        body: {
-          burnTxHash: '<hash from p5-burn>',
-          subject: traderA.address,
-          burned: {
-            currency: 'EURF',
-            amount: '100',
-          },
-          settle: {
-            currency: 'EUR',
-            amount: '100',
-            destination: {
-              beneficiary: 'Trader A',
-              rail: 'SEPA',
-              iban: 'FR76 3000 4000 0312 3456 7890 123',
-              bic: 'BNPAFRPPXXX',
-            },
-          },
-        },
-      }
-    default:
-      return { TransactionType: step.txType, Account: '<unknown>' }
-  }
 }

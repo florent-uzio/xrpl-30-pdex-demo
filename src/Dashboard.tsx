@@ -12,6 +12,7 @@ import {
   Code2,
   Coins,
   Copy,
+  Eye,
   Info,
   KeyRound,
   Loader2,
@@ -22,10 +23,11 @@ import {
   Wallet,
   Workflow,
 } from 'lucide-react'
+import { buildTx } from './buildTx'
+import type { BuildTxContext } from './buildTx'
 import { FlowDiagram } from './FlowDiagram'
 import {
   BADGE_LABELS,
-  buildTxJson,
   NETWORK_URL,
   PHASE_LABELS,
   PHASE_ORDER,
@@ -181,6 +183,12 @@ interface InspectorProps {
   onClose: () => void
 }
 
+const HTTP_STEP_HEADER: Record<string, string> = {
+  'p1-faucet': 'Testnet faucet · POST to faucet.altnet.rippletest.net',
+  'p1-sepa': 'Off-ledger SEPA transfer · POST to bank API',
+  'p5-redeem': 'Fiat redemption · POST to issuer redemption API',
+}
+
 function TxInspector({
   step,
   json,
@@ -196,6 +204,10 @@ function TxInspector({
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1400)
   }
+
+  const headerText = isHttp
+    ? (HTTP_STEP_HEADER[step.id] ?? 'Off-ledger API request')
+    : `${String(json.TransactionType)} · signed and submitted to XRPL`
 
   return (
     <motion.div
@@ -213,9 +225,7 @@ function TxInspector({
             <Code2 className="w-3.5 h-3.5 text-slate-400" />
           )}
           <span className="text-[11px] uppercase tracking-wider text-slate-400">
-            {isHttp
-              ? 'Off-ledger API request · POST to IOU issuer'
-              : 'Transaction preview · signed and submitted to XRPL'}
+            {headerText}
           </span>
           <button
             onClick={handleCopy}
@@ -259,25 +269,35 @@ function TxInspector({
                 </span>
               )}
             </div>
-          ) : (
+          ) : isHttp ? (
             <>
               <button
-                onClick={() => {
-                  onSubmit()
-                  onClose()
-                }}
+                onClick={() => { onSubmit(); onClose() }}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold shadow"
               >
                 <Send className="w-4 h-4" />
-                {isHttp
-                  ? 'Send Redemption Request'
-                  : `Sign & Submit ${step.txType}`}
+                Send Request
               </button>
               <span className="text-[11px] text-slate-500">
-                {isHttp
-                  ? 'mock endpoint · no network call in prototype'
-                  : 'fee 12 drops · testnet'}
+                mock endpoint · no network call in prototype
               </span>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => { onSubmit(); onClose() }}
+                className="px-4 py-2 rounded-md bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-semibold shadow"
+              >
+                Execute
+              </button>
+              <button
+                onClick={() => { onSubmit(); onClose() }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold shadow ring-1 ring-slate-600"
+              >
+                <Send className="w-4 h-4" />
+                Sign & Submit
+              </button>
+              <span className="text-[11px] text-slate-500">fee 12 drops · testnet</span>
             </>
           )}
         </div>
@@ -364,6 +384,11 @@ export function Dashboard() {
     for (const r of results) m.set(r.stepId, r.hash)
     return m
   }, [results])
+
+  const buildTxContext = useMemo<BuildTxContext>(
+    () => ({ accountByRole, burnTxHash: resultByStep.get('p5-burn') }),
+    [accountByRole, resultByStep],
+  )
 
   // Clicking an edge in the diagram jumps to that step's phase tab and pre-opens
   // the JSON inspector so the viewer immediately sees the transaction shape.
@@ -492,7 +517,7 @@ export function Dashboard() {
             const actor = accountByRole.get(step.actor)!
             const Icon = ROLE_ICON[step.actor]
             const isInspecting = inspectingId === step.id
-            const json = buildTxJson(step, accountByRole)
+            const json = buildTx(step, buildTxContext)
             const stepResult = results.find((r) => r.stepId === step.id)
             return (
               <div
@@ -561,8 +586,7 @@ export function Dashboard() {
                       title="Preview transaction JSON before signing"
                       aria-expanded={isInspecting}
                     >
-                      <Code2 className="w-3.5 h-3.5" />
-                      JSON
+                      <Eye className="w-3.5 h-3.5" />
                       <ChevronDown
                         className={`w-3 h-3 transition-transform ${isInspecting ? 'rotate-180' : ''}`}
                       />

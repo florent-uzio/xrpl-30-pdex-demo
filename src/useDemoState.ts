@@ -107,7 +107,7 @@ export function useDemoState() {
           if (granted) {
             next.badges = Array.from(new Set([...a.badges, ...granted])) as Badge[]
           }
-          if (step.id === 'p1-pay-iou') {
+          if (step.id === 'p1-payment') {
             if (a.role === 'traderB') next.eurfBalance = 1000
             if (a.role === 'issuer') next.eurfBalance = -1000
           }
