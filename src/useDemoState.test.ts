@@ -153,4 +153,63 @@ describe('useDemoState', () => {
       'DOMAIN0000000000000000000000000000000000000000000000000000000001',
     )
   })
+
+  it('full happy-path p1-faucet through p5-redeem: correct final badges and EURF balances', async () => {
+    const { result } = renderHook(() => useDemoState())
+    act(() => { result.current.reset() })
+
+    const step = (id: string) => STEPS.find((s) => s.id === id)!
+
+    await act(async () => { await result.current.runStep(step('p1-faucet')) })
+    await act(async () => { await result.current.runStep(step('p1-trustset-a')) })
+    await act(async () => { await result.current.runStep(step('p1-trustset-b')) })
+    await act(async () => { await result.current.runStep(step('p1-sepa')) })
+    await act(async () => { await result.current.runStep(step('p1-payment')) })
+    await act(async () => { await result.current.runStep(step('p2-credcreate-a')) })
+    await act(async () => { await result.current.runStep(step('p2-credcreate-b')) })
+    await act(async () => { await result.current.runStep(step('p2-accept-a')) })
+    await act(async () => { await result.current.runStep(step('p2-accept-b')) })
+    await act(async () => { await result.current.runStep(step('p3-domain')) })
+    await act(async () => { await result.current.runStep(step('p4-offer-a')) })
+    await act(async () => { await result.current.runStep(step('p4-offer-b')) })
+    await act(async () => { await result.current.runStep(step('p4-open-offer')) })
+    await act(async () => { await result.current.runStep(step('p5-burn')) })
+    await act(async () => { await result.current.runStep(step('p5-redeem')) })
+
+    const { accountByRole, completed, results } = result.current
+
+    for (const s of STEPS) {
+      expect(completed.has(s.id)).toBe(true)
+    }
+
+    const traderA = accountByRole.get('traderA')!
+    const traderB = accountByRole.get('traderB')!
+    const domainOwner = accountByRole.get('domainOwner')!
+
+    expect(traderA.badges).toContain('TrustLine')
+    expect(traderA.badges).toContain('KYC')
+    expect(traderA.badges).toContain('TradeExecuted')
+    expect(traderA.badges).toContain('Settled')
+
+    expect(traderB.badges).toContain('TrustLine')
+    expect(traderB.badges).toContain('IOUFunded')
+    expect(traderB.badges).toContain('KYC')
+    expect(traderB.badges).toContain('TradeExecuted')
+
+    expect(domainOwner.badges).toContain('DomainActive')
+
+    // traderA: 0 + 100 (p4-offer-b) - 100 (p5-burn) = 0
+    expect(traderA.eurfBalance).toBe(0)
+    // traderB: 1000 (p1-payment) - 100 (p4-offer-b) = 900
+    expect(traderB.eurfBalance).toBe(900)
+
+    const burnResult = results.find((r) => r.stepId === 'p5-burn')!
+    expect(burnResult.ok).toBe(true)
+    expect(burnResult.hash).not.toBe('N/A')
+    expect(burnResult.closeTime).toBeDefined()
+
+    const redeemResult = results.find((r) => r.stepId === 'p5-redeem')!
+    expect(redeemResult.ok).toBe(true)
+    expect(redeemResult.hash).toMatch(/^RDMP-/)
+  })
 })

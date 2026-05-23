@@ -12,6 +12,7 @@ const LS_RESULTS = 'pdex-results'
 // Wallets and domain ID in module-level state — survive re-renders, not a page refresh.
 let walletStore: Map<AccountRole, Wallet> = new Map()
 let domainIdStore: string | undefined = undefined
+let burnTxHashStore: string | undefined = undefined
 
 function buildContextFromStore(): BuildTxContext {
   const m = new Map<AccountRole, Account>()
@@ -19,7 +20,7 @@ function buildContextFromStore(): BuildTxContext {
     const w = walletStore.get(acc.role)
     m.set(acc.role, w ? { ...acc, address: w.classicAddress } : acc)
   }
-  return { accountByRole: m, domainId: domainIdStore }
+  return { accountByRole: m, domainId: domainIdStore, burnTxHash: burnTxHashStore }
 }
 
 function extractDomainId(meta: Record<string, unknown>): string | undefined {
@@ -468,7 +469,79 @@ export function useDemoState() {
         return
       }
 
-      // Mock behavior for remaining steps (SEPA is off-ledger; phases 4-5 not yet wired).
+      if (step.id === 'p5-burn') {
+        const wallet = walletStore.get('traderA')
+        if (!wallet) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: 'Run faucet first to fund wallets',
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          return
+        }
+        try {
+          const tx = buildTx(step, buildContextFromStore())
+          const { hash, closeTime, ok, errorCode } = await submitXrpl(tx, wallet)
+          if (ok) {
+            burnTxHashStore = hash
+            setAccounts((prev) =>
+              prev.map((a) => {
+                const next = { ...a }
+                if (a.role === 'traderA') next.eurfBalance = a.eurfBalance - 100
+                if (a.role === 'issuer') next.eurfBalance = a.eurfBalance + 100
+                return next
+              }),
+            )
+          }
+          const result: TxResult = {
+            stepId: step.id,
+            hash,
+            closeTime,
+            ts: Date.now(),
+            ok,
+            message: ok ? `${step.txType} validated` : `${step.txType} failed: ${errorCode}`,
+          }
+          setResults((prev) => {
+            const next = [...prev, result]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+          if (ok) {
+            setCompleted((prev) => {
+              const next = new Set(prev).add(step.id)
+              localStorage.setItem(LS_COMPLETED, JSON.stringify([...next]))
+              return next
+            })
+          }
+        } catch (err) {
+          setResults((prev) => {
+            const next = [
+              ...prev,
+              {
+                stepId: step.id,
+                hash: 'N/A',
+                ts: Date.now(),
+                ok: false,
+                message: err instanceof Error ? err.message : `${step.txType} failed`,
+              },
+            ]
+            localStorage.setItem(LS_RESULTS, JSON.stringify(next))
+            return next
+          })
+        }
+        return
+      }
+
+      // Mock behavior for remaining steps (SEPA and p5-redeem are off-ledger).
       setAccounts((prev) =>
         prev.map((a) => {
           const granted = step.grants[a.role]
@@ -479,10 +552,6 @@ export function useDemoState() {
           if (step.id === 'p1-payment') {
             if (a.role === 'traderB') next.eurfBalance = 1000
             if (a.role === 'issuer') next.eurfBalance = -1000
-          }
-          if (step.id === 'p5-burn') {
-            if (a.role === 'traderA') next.eurfBalance = a.eurfBalance - 100
-            if (a.role === 'issuer') next.eurfBalance = a.eurfBalance + 100
           }
           return next
         }),
@@ -519,6 +588,7 @@ export function useDemoState() {
   const reset = useCallback(() => {
     walletStore = new Map()
     domainIdStore = undefined
+    burnTxHashStore = undefined
     setAccounts(INITIAL_ACCOUNTS)
     setCompleted(new Set())
     setResults([])
