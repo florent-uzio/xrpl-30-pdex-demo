@@ -96,7 +96,12 @@ export function useDemoState() {
 
         try {
           if (!xrplClient.isConnected()) await xrplClient.connect()
-          const results = await Promise.all(roles.map((role) => xrplClient.fundWallet().then(({ wallet, balance }) => ({ role, wallet, balance }))))
+          const faucetOpts = {
+            faucetHost: window.location.host,
+            faucetPath: '/api/faucet',
+            faucetProtocol: window.location.protocol.slice(0, -1) as 'http' | 'https',
+          }
+          const results = await Promise.all(roles.map((role) => xrplClient.fundWallet(null, faucetOpts).then(({ wallet, balance }) => ({ role, wallet, balance }))))
           for (const { role, wallet, balance } of results) {
             walletStore.set(role, wallet)
             funded.push({ role, address: wallet.classicAddress, balance })
