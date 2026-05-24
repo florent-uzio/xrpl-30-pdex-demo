@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Wallet } from 'xrpl'
+import { Wallet } from 'xrpl'
 import { buildTx } from './buildTx'
 import type { BuildTxContext } from './buildTx'
 import { INITIAL_ACCOUNTS } from './mockState'
@@ -8,9 +8,29 @@ import type { Account, AccountRole, Badge, DemoStep, TxResult } from './types'
 
 const LS_COMPLETED = 'pdex-completed'
 const LS_RESULTS = 'pdex-results'
+const LS_WALLETS = 'pdex-wallets'
+
+function persistWallets(store: Map<AccountRole, Wallet>) {
+  const entries = Array.from(store.entries()).map(([role, w]) => [role, w.seed])
+  localStorage.setItem(LS_WALLETS, JSON.stringify(entries))
+}
 
 // Wallets and domain ID in module-level state — survive re-renders, not a page refresh.
-let walletStore: Map<AccountRole, Wallet> = new Map()
+// Wallets are also persisted to localStorage (seeds only) so they survive page refreshes.
+let walletStore: Map<AccountRole, Wallet> = (() => {
+  try {
+    const raw = localStorage.getItem(LS_WALLETS)
+    if (!raw) return new Map()
+    const entries = JSON.parse(raw) as Array<[AccountRole, string]>
+    const m = new Map<AccountRole, Wallet>()
+    for (const [role, seed] of entries) {
+      if (seed) m.set(role, Wallet.fromSeed(seed))
+    }
+    return m
+  } catch {
+    return new Map()
+  }
+})()
 let domainIdStore: string | undefined = undefined
 let burnTxHashStore: string | undefined = undefined
 
@@ -106,6 +126,7 @@ export function useDemoState() {
             walletStore.set(role, wallet)
             funded.push({ role, address: wallet.classicAddress, balance })
           }
+          persistWallets(walletStore)
         } catch (err) {
           const errResult: TxResult = {
             stepId: step.id,
@@ -599,6 +620,7 @@ export function useDemoState() {
     setResults([])
     localStorage.removeItem(LS_COMPLETED)
     localStorage.removeItem(LS_RESULTS)
+    localStorage.removeItem(LS_WALLETS)
   }, [])
 
   const accountByRole = useMemo(() => {
