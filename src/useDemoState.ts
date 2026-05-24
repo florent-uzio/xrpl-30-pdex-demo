@@ -96,8 +96,8 @@ export function useDemoState() {
 
         try {
           if (!xrplClient.isConnected()) await xrplClient.connect()
-          for (const role of roles) {
-            const { wallet, balance } = await xrplClient.fundWallet()
+          const results = await Promise.all(roles.map((role) => xrplClient.fundWallet().then(({ wallet, balance }) => ({ role, wallet, balance }))))
+          for (const { role, wallet, balance } of results) {
             walletStore.set(role, wallet)
             funded.push({ role, address: wallet.classicAddress, balance })
           }
