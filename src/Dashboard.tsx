@@ -397,12 +397,18 @@ export function Dashboard() {
   // explainer first, then drill into the phase tabs to execute transactions).
   const [activeTab, setActiveTab] = useState<TabKey>('flow')
   const [inspectingId, setInspectingId] = useState<string | null>(null)
-  const [runningId, setRunningId] = useState<string | null>(null)
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
 
   const handleRunStep = useCallback(
     (step: DemoStep) => {
-      setRunningId(step.id)
-      runStep(step).finally(() => setRunningId(null))
+      setRunningIds((prev) => new Set(prev).add(step.id))
+      runStep(step).finally(() =>
+        setRunningIds((prev) => {
+          const next = new Set(prev)
+          next.delete(step.id)
+          return next
+        }),
+      )
     },
     [runStep],
   )
@@ -567,7 +573,7 @@ export function Dashboard() {
         <div className="col-span-2 flex flex-col gap-3">
           {phaseSteps.map((step) => {
             const done = completed.has(step.id)
-            const isRunning = runningId === step.id
+            const isRunning = runningIds.has(step.id)
             const actor = accountByRole.get(step.actor)!
             const Icon = ROLE_ICON[step.actor]
             const isInspecting = inspectingId === step.id
